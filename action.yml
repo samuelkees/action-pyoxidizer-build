@@ -1,0 +1,147 @@
+name: "pyoxidizer-build"
+description: "Build project with pyoxidizer on linux gnu x64. Code has to be checked out."
+
+inputs:
+  target-system:
+    description: "Select one of the following system to build on: [linux_gnu_x64, windows_x32, windows_x64, macos_x64]"
+    required: true
+
+  app-name:
+    description: "The name of the app. This name can later be used in the command line to call the app"
+    required: true
+
+  run-command:
+    description: "The command to run at the start of the app. (eg. \"from package.main import main; main()\""
+    required: true
+
+  display-name:
+    description: "The name, which appears in the name of the msi-installer and in the program files folder"
+    required: true
+
+  app-author:
+    description: "The name of the author or the manufacturer, which is displayed when installing the app per msi-installer"
+    required: true
+
+  artifact-name:
+    description: "Name of the artifact, where the built file should be uploaded"
+    required: true
+
+  use-own-pyoxidizer-config:
+    description: "Use own pyoxidizer.bzl, given in the project folder if true, otherwise use standard config provided by this action"
+    required: false
+    default: 'false'
+
+  poetry-version:
+    description: "Version of poetry to install"
+    required: false
+    default: "1.1.14"
+
+  python-version:
+    description: "Version of python to install"
+    required: false
+    default: "3.10"
+
+
+runs:
+  using: "composite"
+  steps:  
+
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install pyoxidizer
+      run: pip install pyoxidizer
+      shell: pwsh
+
+    - name: Setup poetry
+      id: setup-poetry
+      uses: henningwoehr/action-poetry-setup@v1
+      with:
+        python-version: ${{ inputs.python-version }}
+        poetry-version: ${{ inputs.poetry-version }}
+
+    - if: inputs.use-own-pyoxidizer-config == 'false'
+      name: Get pyoxidizer build file
+      run: curl https://raw.githubusercontent.com/henningWoehr/action-pyoxidizer-build/v1.0.0/pyoxidizer.bzl > pyoxidizer.bzl
+      shell: pwsh
+
+    - name: Set build variables
+      id: build-variables
+      run: | 
+        if ('${{inputs.use-own-pyoxidizer-config}}' -eq 'false')
+        {
+          $OUTPUT = "--var app_name ${{ inputs.app-name }} --var run_command '${{ inputs.run-command }}' --var display_name '${{ inputs.display-name }}' --var app_version ${{ steps.setup-poetry.outputs.project-version }} --var app_author '${{ inputs.app-author }}'"
+        }
+        else
+        {
+          $OUTPUT = ""
+        }
+        echo "::set-output name=vars::$OUTPUT"
+      shell: pwsh
+
+    - name: Set build target linux (exe)
+      id: build-target
+      run: |
+        switch ('${{ inputs.target-system }}')
+        {
+            'linux_gnu_x64'
+            {
+                $OUTPUT = "exe"
+            }
+            'windows_x32'
+            {
+                $OUTPUT = "msi_installer"
+            }
+            'windows_x64'
+            {
+                $OUTPUT = "msi_installer"
+            }
+        }
+        echo "::set-output name=target::$OUTPUT"
+      shell: pwsh
+
+    - name: Set target-triple (linux_gnu_x64)
+      id: target-triple
+      run: |
+        switch ('${{ inputs.target-system }}')
+        {
+            'linux_gnu_x64'
+            {
+                $OUTPUT = "x86_64-unknown-linux-gnu"
+            }
+            'windows_x32'
+            {
+                $OUTPUT = "i686-pc-windows-msvc"
+            }
+            'windows_x64'
+            {
+                $OUTPUT = "x86_64-pc-windows-msvc"
+            }
+        }
+        echo "::set-output name=target::$OUTPUT"
+      shell: pwsh
+
+    - name: Build executable with pyoxidizer
+      run: pyoxidizer build ${{ steps.build-target.outputs.target }} --target-triple ${{ steps.target-triple.outputs.target }} --release ${{ steps.build-variables.outputs.vars }}
+      shell: pwsh
+
+    - run: mkdir built_file
+      shell: pwsh
+
+    - if: inputs.target-system == 'linux_gnu_x64'
+      run: |
+        strip ./build/*/release/exe/*
+        Compress-Archive build/*/release/exe/* -d built_file/linux_gnu_x64_exe.zip
+      shell: pwsh
+
+    - if: inputs.target-system == 'windows_x32' || inputs.target-system == 'windows_x64'
+      run: |
+        Compress-Archive build/*/release/msi_installer/*.msi -d built_file/${{ inputs.target-system }}_msi-installer.zip
+      shell: pwsh
+
+    - name: Upload built file
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: built_file/
+        retention-days: 1
