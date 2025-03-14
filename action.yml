@@ -31,6 +31,11 @@ inputs:
     required: false
     default: 'false'
 
+  use-lib-for-dependencies:
+    description: "Use lib for dependencies that don't support memory loading"
+    required: false
+    default: 'false'
+
   poetry-version:
     description: "Version of poetry to install"
     required: false
@@ -62,7 +67,7 @@ runs:
 
     - if: inputs.use-own-pyoxidizer-config == 'false'
       name: Get pyoxidizer build file
-      run: curl https://raw.githubusercontent.com/henningWoehr/action-pyoxidizer-build/v1.0.0/pyoxidizer.bzl > pyoxidizer.bzl
+      run: curl https://raw.githubusercontent.com/henningWoehr/action-pyoxidizer-build/add-option-for-using-lib/pyoxidizer.bzl > pyoxidizer.bzl
       shell: pwsh
 
     - name: Set build variables
@@ -70,7 +75,7 @@ runs:
       run: | 
         if ('${{inputs.use-own-pyoxidizer-config}}' -eq 'false')
         {
-          $OUTPUT = "--var app_name ${{ inputs.app-name }} --var run_command '${{ inputs.run-command }}' --var display_name '${{ inputs.display-name }}' --var app_version ${{ steps.setup-poetry.outputs.project-version }} --var app_author '${{ inputs.app-author }}'"
+          $OUTPUT = "--var app_name ${{ inputs.app-name }} --var run_command '${{ inputs.run-command }}' --var display_name '${{ inputs.display-name }}' --var app_version ${{ steps.setup-poetry.outputs.project-version }} --var app_author '${{ inputs.app-author }}' --var use_lib '${{ inputs.use-lib-for-dependencies }}'"
         }
         else
         {
@@ -86,7 +91,7 @@ runs:
         {
             'linux_gnu_x64'
             {
-                $OUTPUT = "exe"
+                $OUTPUT = "install"
             }
             'windows_x32'
             {
@@ -130,8 +135,8 @@ runs:
 
     - if: inputs.target-system == 'linux_gnu_x64'
       run: |
-        strip ./build/*/release/exe/*
-        Compress-Archive build/*/release/exe/* -d built_file/linux_gnu_x64_exe.zip
+        # strip ./build/*/release/exe/*
+        Compress-Archive build/*/release/install/* -d built_file/linux_gnu_x64_exe.zip
       shell: pwsh
 
     - if: inputs.target-system == 'windows_x32' || inputs.target-system == 'windows_x64'
