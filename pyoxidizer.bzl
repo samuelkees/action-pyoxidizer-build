@@ -94,7 +94,8 @@ def make_exe():
 
     # Attempt to add resources relative to the built binary when
     # `resources_location` fails.
-    # policy.resources_location_fallback = "filesystem-relative:prefix"
+    if VARS.get("use_lib", "false") == "true":
+        policy.resources_location_fallback = "filesystem-relative:lib"
 
     # Clear out a fallback resource location.
     # policy.resources_location_fallback = None
